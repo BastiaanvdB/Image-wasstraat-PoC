@@ -1,0 +1,39 @@
+# List of known malicious IPs
+- list: known_malicious_ips
+  items: ["192.168.0.1", "10.0.0.1"]  # Replace with actual IPs
+
+
+# Rule to detect potentially malicious script execution
+- rule: Detect Malicious Scripts
+  desc: Detect potentially malicious script execution
+  condition: >
+    evt.type=execve and
+    proc.name in (sh, bash, dash, ash, zsh, ksh, python, perl, ruby) and
+    (proc.cmdline contains "curl" or proc.cmdline contains "wget" or proc.cmdline contains "nc" or proc.cmdline contains "netcat" or proc.cmdline contains "python -m SimpleHTTPServer")
+  output: "Potential malicious script detected (command=%proc.cmdline user=%user.name container_id=%container.id)"
+  priority: CRITICAL
+  tags: [script, container, security]
+
+# Rule to detect container escape attempts
+- rule: Detect Container Escape Attempt
+  desc: Detect processes attempting to access sensitive files on the host from a container
+  condition: >
+    evt.type in (open, execve) and
+    container.id != host and
+    (fd.name in (/etc/shadow, /etc/passwd, /root/.ssh/authorized_keys, /etc/hostname) or
+    (proc.name in (nsenter, lxc-attach, runc) and proc.cmdline contains "host"))
+  output: "Container escape attempt detected (process=%proc.name user=%user.name file=%fd.name container_id=%container.id)"
+  priority: CRITICAL
+  tags: [container, escape, host]
+
+# Rule to detect suspicious activities indicative of malware
+- rule: Detect Malware Activity
+  desc: Detect suspicious activities indicative of malware
+  condition: >
+    evt.type in (open, connect) and
+    (proc.name in (cryptominer, botnet, keylogger) or
+    (evt.type=open and fd.name contains "/tmp/malicious" and fd.typechar = "f") or
+    (evt.type=connect and fd.sip in (known_malicious_ips)))
+  output: "Suspicious activity detected (process=%proc.name file=%fd.name container_id=%container.id)"
+  priority: CRITICAL
+  tags: [malware, security, container]

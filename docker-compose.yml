@@ -1,0 +1,151 @@
+services:
+  # Approved image Registry
+  registry:
+    image: registry:2.8.3
+    restart: always
+    container_name: approved-image-registry
+    ports:
+      - "5000:5000"
+    volumes:
+      - approved-image-registry-volume:/var/lib/registry
+    environment:
+      REGISTRY_HTTP_ADDR: 0.0.0.0:5000
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    networks:
+      gitlab-network:
+        ipv4_address: 172.20.0.2
+        aliases:
+          - approved-image-registry
+
+  # GITLAB
+  gitlab-web:
+    image: 'gitlab/gitlab-ce:17.0.1-ce.0'
+    restart: always
+    container_name: gitlab-web
+    hostname: 'gitlab-web'
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        gitlab_rails['initial_root_password'] = '2024Vz2404Vz@@'
+        external_url 'http://localhost'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+    ports:
+      - "80:80"
+      - "443:443"
+      - "2222:22"
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+    networks:
+      gitlab-network:
+        ipv4_address: 172.20.0.3
+        aliases:
+          - gitlab-web
+
+  # RUNNER 1
+  gitlab-runner-1:
+    image: gitlab/gitlab-runner:alpine3.19-v17.0.0
+    restart: always
+    container_name: gitlab-runner-1
+    hostname: gitlab-runner-1
+    depends_on:
+      - gitlab-web
+    volumes:
+      - ./gitlab-runners/runner-1/config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      gitlab-network:
+        ipv4_address: 172.20.0.4
+        aliases:
+          - gitlab-runner-1
+
+  # Clair server
+  clair:
+    image: quay.io/projectquay/clair:4.7.4
+    restart: always
+    container_name: clair
+    depends_on:
+      - postgres-clair
+    volumes:
+      - ./clair/clair-config/:/config/:ro
+      - clair-tmp:/tmp:rw
+    environment:
+      CLAIR_MODE: combo
+      CLAIR_CONF: /config/config.yaml
+    networks:
+      gitlab-network:
+        ipv4_address: 172.20.0.5
+        aliases:
+          - clair
+
+  # Database for clair
+  postgres-clair:
+    image: postgres:16.2
+    restart: always
+    container_name: postgres-clair
+    environment:
+      POSTGRES_PASSWORD: ChangeMe
+      POSTGRES_USER: clair
+      POSTGRES_DB: clair
+    volumes:
+      - postgres-clair-data:/var/lib/postgresql/data:rw
+    networks:
+      gitlab-network:
+        ipv4_address: 172.20.0.6
+        aliases:
+          - postgres-clair
+
+  # Database
+  mongo:
+    image: mongo:7.0.9
+    restart: always
+    container_name: mongo_database
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: secret
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      gitlab-network:
+        ipv4_address: 172.20.0.7
+        aliases:
+          - mongo_database
+
+  # Public and Private key vault
+  vault:
+    image: hashicorp/vault:1.16.3
+    restart: always
+    container_name: vault
+    ports:
+      - "8200:8200"
+    networks:
+      gitlab-network:
+        ipv4_address: 172.20.0.8
+        aliases:
+          - vault
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - vault-volume:/vault:rw
+      - ./vault/vault-config.hcl:/vault/config/vault-config.hcl
+    command: "server"
+
+volumes:
+  mongo-data:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:
+  postgres-clair-data:
+  clair-tmp:
+  vault-volume:
+  approved-image-registry-volume:
+
+networks:
+  gitlab-network:
+    name: gitlab-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

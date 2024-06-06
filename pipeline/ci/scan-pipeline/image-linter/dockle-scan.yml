@@ -1,0 +1,29 @@
+default:
+  image: quay.io/bastiaanvanderbijl/docker:26.1.3
+
+dockle-scan:
+  stage: scan-pipeline:dockle-scan
+  needs: [verify-image]
+  services:
+    - name: quay.io/bastiaanvanderbijl/docker:26.1.3-dind
+      alias: docker-dind-dockle
+  variables:
+    DOCKER_HOST: tcp://docker-dind-dockle:2375/
+  before_script:
+    - while ! docker info; do sleep 1; done
+  script:
+    - mkdir -p reports
+    - >
+      if ! docker run --rm -v $(pwd)/reports:/tmp/reports quay.io/bastiaanvanderbijl/dockle -f json -o /tmp/reports/dockle-report.json $IMAGE_NAME:$IMAGE_TAG; then
+        echo "Dockle scan failed. See the job log for details." >&2
+        exit 1
+      fi
+  artifacts:
+    paths:
+      - reports/
+  allow_failure: false
+  after_script:
+    - docker container prune -f
+    - docker image prune -f
+  rules:
+    - if: '$CI_COMMIT_TAG == "scan-pipeline"'

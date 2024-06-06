@@ -1,0 +1,37 @@
+http_listen_addr: "0.0.0.0:6060"
+introspection_addr: "0.0.0.0:6061"
+log_level: "info"
+
+indexer:
+  connstring: "host=postgres-clair port=5432 dbname=clair user=clair password=ChangeMe sslmode=disable"
+  scanlock_retry: 10
+  layer_scan_concurrency: 5
+  migrations: true
+
+matcher:
+  connstring: "host=postgres-clair port=5432 dbname=clair user=clair password=ChangeMe sslmode=disable"
+  indexer_addr: "http://localhost:6060"
+  migrations: true
+  period: "24h"
+  disable_updaters: false
+  update_retention: 2
+
+notifier:
+  connstring: "host=postgres-clair port=5432 dbname=clair user=clair password=ChangeMe sslmode=disable"
+  migrations: true
+  indexer_addr: "http://localhost:6060"
+  matcher_addr: "http://localhost:6060"
+  poll_interval: "10m"
+  delivery_interval: "10m"
+  webhook: null
+  amqp: null
+  stomp: null
+auth:
+  psk: null
+
+trace:
+  name: "clair"
+  probability: null
+
+metrics:
+  name: ""

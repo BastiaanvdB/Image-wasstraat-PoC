@@ -1,0 +1,52 @@
+retrieve-catalog:
+  stage: rescan-pipeline:retrieve-catalog
+  image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
+  script:
+    - mkdir -p reports
+    - pip install requests
+    - |
+      python - <<EOF
+      import requests
+      import json
+      import re
+
+      def get_registry_catalog(registry_url):
+          catalog_url = f"{registry_url}/v2/_catalog"
+          response = requests.get(catalog_url)
+          response.raise_for_status()
+          return response.json().get("repositories", [])
+
+      def get_image_tags(registry_url, image_name):
+          tags_url = f"{registry_url}/v2/{image_name}/tags/list"
+          response = requests.get(tags_url)
+          response.raise_for_status()
+          return response.json().get("tags", [])
+
+      def main():
+          registry_url = "http://172.20.0.2:5000"
+          images = get_registry_catalog(registry_url)
+          
+          catalog_overview = []
+          
+          if not images:
+              print("No images found in the registry.")
+          else:
+              for image in images:
+                  tags = get_image_tags(registry_url, image)
+                  # Filter out Cosign signature tags
+                  correct_tags = [tag for tag in tags if not re.match(r'^sha256-.*\.sig$', tag)]
+                  catalog_overview.append({"image": image, "tags": correct_tags})
+
+          # Save the catalog overview to a JSON file
+          with open("reports/catalog-overview.json", "w") as f:
+              json.dump(catalog_overview, f, indent=2)
+
+      if __name__ == "__main__":
+          main()
+      EOF
+  artifacts:
+    paths:
+      - reports/catalog-overview.json
+  allow_failure: false
+  only:
+    - schedules

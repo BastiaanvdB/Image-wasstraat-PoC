@@ -1,0 +1,80 @@
+upload-new-found-CVEs-mongo:
+  stage: rescan-pipeline:upload-new-found-CVEs
+  needs:
+    - combine-static-security-rescan-reports
+  image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
+  script:
+    - pip install pymongo
+    - |
+      python - <<EOF
+      from pymongo import MongoClient
+      import os
+      from datetime import datetime, timezone
+      import json
+
+      # Load the JSON report
+      with open('reports/combined_static_security_reports.json') as f:
+          report = json.load(f)
+
+      # Get environment variables for MongoDB connection
+      mongo_uri = os.environ.get("MONGO_URI")
+      client = MongoClient(mongo_uri)
+      db = client["image_wasstraat"]
+      collection = db["scanning_reports"]
+
+      for internal_image_tag, vulnerabilities in report['results'].items():
+          internal_image, internal_tag = internal_image_tag.rsplit(":", 1)
+
+          # Define the filter to find the document using internal_image and internal_tag
+          filter = {"internal_image": internal_image, "internal_tag": internal_tag}
+
+          # Find the existing document
+          existing_document = collection.find_one(filter)
+
+          # Initialize new vulnerabilities list
+          new_vulnerabilities = []
+
+          if existing_document:
+              image_name = existing_document['image']
+              image_tag = existing_document['tag']
+              existing_vulnerabilities = existing_document.get('static scan vulnerabilities', [])
+
+              # Add new vulnerabilities if they are not already in the existing document
+              for new_vuln in vulnerabilities:
+                  # Ensure the 'CVE ID' key exists in the new vulnerability
+                  if 'CVE ID' in new_vuln:
+                      if not any(existing_vuln.get('CVE ID') == new_vuln['CVE ID'] for existing_vuln in existing_vulnerabilities):
+                          new_vulnerabilities.append(new_vuln)
+                  else:
+                      print(f"Warning: 'CVE ID' key missing in new vulnerability: {new_vuln}")
+
+              update = {
+                  "image": image_name,
+                  "tag": image_tag,
+                  "static scan vulnerabilities": existing_vulnerabilities,
+                  "dynamic scan vulnerabilities": existing_document.get('dynamic scan vulnerabilities'),
+                  "sbom": existing_document.get('sbom'),
+                  "container_image_linter": existing_document.get('container_image_linter'),
+                  "internal_image": internal_image,
+                  "internal_tag": internal_tag,
+                  "new_vulnerabilities": new_vulnerabilities,
+                  "status": "approved",
+                  "finished_at": datetime.now(timezone.utc)
+              }
+
+              # Replace the existing document with the updated data
+              result = collection.replace_one(filter, update)
+
+              if result.matched_count > 0:
+                  print("Final combined report updated in MongoDB")
+              else:
+                  print("No matching document found to update")
+          else:
+              print(f"No existing document found with the specified internal image and tag: {internal_image}:{internal_tag}")
+
+      EOF
+  dependencies:
+    - combine-static-security-rescan-reports
+  allow_failure: false
+  only:
+    - schedules

@@ -1,0 +1,180 @@
+process-grype:
+  stage: scan-pipeline:static-security-scan-report-process
+  needs: [grype-scan]
+  image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
+  script:
+    - pip install pandas
+    - |
+      python - <<EOF
+      import json
+      import pandas as pd
+
+      try:
+          def load_json_report(file_path):
+              with open(file_path) as f:
+                  return json.load(f)
+
+          # Load the Grype report
+          grype_report = load_json_report('reports/grype-report.json')
+
+          # Initialize an empty list for vulnerabilities
+          grype_data = []
+
+          # Check if 'matches' key is in the report and process if present
+          if 'matches' in grype_report:
+              grype_vulns = grype_report['matches']
+              for match in grype_vulns:
+                  vuln = match['vulnerability']
+                  artifact = match['artifact']
+                  grype_data.append({
+                      'CVE ID': vuln['id'],
+                      'Package Name': artifact['name'],
+                      'Installed Version': artifact['version'],
+                      'Severity': vuln['severity'],
+                      'Description': vuln.get('description', ''),
+                      'Fixed Version': vuln.get('fixed_in_version', ''),
+                      'Found by Scanner': ['Grype'],
+                      'Link to More Information': vuln.get('links', [''])[0]
+                  })
+
+          # Save processed data if there are any vulnerabilities
+          if grype_data:
+              pd.DataFrame(grype_data).to_json('reports/processed_grype_report.json', orient='records', indent=4)
+          else:
+              # If no vulnerabilities found, create an empty JSON array
+              with open('reports/processed_grype_report.json', 'w') as f:
+                  json.dump([], f, indent=4)
+      except Exception as e:
+          print(f"An error occurred while processing the Grype report: {e}")
+          exit(1)
+      EOF
+  artifacts:
+    paths:
+      - reports/processed_grype_report.json
+  dependencies:
+    - grype-scan
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_TAG == "scan-pipeline"'
+
+
+process-clair:
+  stage: scan-pipeline:static-security-scan-report-process
+  needs: [clair-scan]
+  image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
+  script:
+    - pip install pandas
+    - |
+      python - <<EOF
+      import json
+      import pandas as pd
+
+      try:
+          def load_json_report(file_path):
+              with open(file_path) as f:
+                  return json.load(f)
+
+          # Load the Clair report
+          clair_report = load_json_report('reports/clair-report.json')
+
+          # Initialize an empty list for vulnerabilities
+          clair_data = []
+
+          # Check if 'vulnerabilities' key is in the report and process if present
+          if 'vulnerabilities' in clair_report:
+              clair_vulns = clair_report['vulnerabilities']
+              for vuln_id, vuln_details in clair_vulns.items():
+                  package_id = vuln_details['package']['id']
+                  package_name = clair_report['packages'][package_id]['name'] if package_id in clair_report['packages'] else vuln_details['package']['name']
+                  package_version = clair_report['packages'][package_id]['version'] if package_id in clair_report['packages'] else vuln_details['package']['version']
+
+                  clair_data.append({
+                      'CVE ID': vuln_details['name'],
+                      'Package Name': package_name,
+                      'Installed Version': package_version,
+                      'Severity': vuln_details['normalized_severity'],
+                      'Description': vuln_details.get('description', ''),
+                      'Fixed Version': vuln_details.get('fixed_in_version', ''),
+                      'Found by Scanner': ['Clair'],
+                      'Link to More Information': vuln_details.get('links', '')
+                  })
+
+          # Save processed data if there are any vulnerabilities
+          if clair_data:
+              pd.DataFrame(clair_data).to_json('reports/processed_clair_report.json', orient='records', indent=4)
+          else:
+              # If no vulnerabilities found, create an empty JSON array
+              with open('reports/processed_clair_report.json', 'w') as f:
+                  json.dump([], f, indent=4)
+      except Exception as e:
+          print(f"An error occurred while processing the Clair report: {e}")
+          exit(1)
+      EOF
+  artifacts:
+    paths:
+      - reports/processed_clair_report.json
+  dependencies:
+    - clair-scan
+  rules:
+    - if: '$CI_COMMIT_TAG == "scan-pipeline"'
+  allow_failure: false
+
+
+process-trivy:
+  stage: scan-pipeline:static-security-scan-report-process
+  needs: [trivy-scan]
+  image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
+  script:
+    - pip install pandas
+    - |
+      python - <<EOF
+      import json
+      import pandas as pd
+
+      try:
+          def load_json_report(file_path):
+              with open(file_path) as f:
+                  return json.load(f)
+
+          # Load the Trivy report
+          trivy_report = load_json_report('reports/trivy-report.json')
+
+          # Initialize an empty list for vulnerabilities
+          trivy_data = []
+
+          # Check if 'Results' key is in the report and process if present
+          if 'Results' in trivy_report:
+              trivy_vulns = trivy_report['Results']
+              for result in trivy_vulns:
+                  if 'Vulnerabilities' in result:
+                      for vuln in result['Vulnerabilities']:
+                          trivy_data.append({
+                              'CVE ID': vuln['VulnerabilityID'],
+                              'Package Name': vuln['PkgName'],
+                              'Installed Version': vuln['InstalledVersion'],
+                              'Severity': vuln['Severity'],
+                              'Description': vuln.get('Description', ''),
+                              'Fixed Version': vuln.get('FixedVersion', ''),
+                              'Found by Scanner': ['Trivy'],
+                              'Link to More Information': vuln.get('PrimaryURL', '')
+                          })
+
+          # Save processed data if there are any vulnerabilities
+          if trivy_data:
+              pd.DataFrame(trivy_data).to_json('reports/processed_trivy_report.json', orient='records', indent=4)
+          else:
+              # If no vulnerabilities found, create an empty JSON array
+              with open('reports/processed_trivy_report.json', 'w') as f:
+                  json.dump([], f, indent=4)
+      except Exception as e:
+          print(f"An error occurred while processing the Trivy report: {e}")
+          exit(1)
+      EOF
+  artifacts:
+    paths:
+      - reports/processed_trivy_report.json
+  dependencies:
+    - trivy-scan
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_TAG == "scan-pipeline"'

@@ -1,0 +1,29 @@
+default:
+  image: quay.io/bastiaanvanderbijl/docker:26.1.3
+
+syft-scan:
+  stage: scan-pipeline:sbom-scan
+  needs: [verify-image]
+  services:
+    - name: quay.io/bastiaanvanderbijl/docker:26.1.3-dind
+      alias: docker-dind-syft
+  variables:
+    DOCKER_HOST: tcp://docker-dind-syft:2375/
+  before_script:
+    - while ! docker info; do sleep 1; done
+  script:
+    - mkdir -p reports
+    - >
+      if ! docker run --rm quay.io/bastiaanvanderbijl/syft $IMAGE_NAME:$IMAGE_TAG --scope all-layers -o json > reports/syft-report.json; then
+        echo "Syft scan failed. See the job log for details." >&2
+        exit 1
+      fi
+  artifacts:
+    paths:
+      - reports/
+  allow_failure: false
+  after_script:
+    - docker container prune -f
+    - docker image prune -f
+  rules:
+    - if: '$CI_COMMIT_TAG == "scan-pipeline"'

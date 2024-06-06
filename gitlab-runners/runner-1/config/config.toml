@@ -1,0 +1,22 @@
+concurrent = 3
+
+[[runners]]
+name = "Docker Runner 1"
+url = "http://gitlab-web/"
+token = "glrt-yaCUZEprxuLiy1yyWPsM"
+executor = "docker"
+clone_url = "http://gitlab-web/"
+[runners.docker]
+tls_verify = false
+image = "docker:26.1.3"
+privileged = true
+disable_entrypoint_overwrite = false
+oom_kill_disable = false
+disable_cache = false
+volumes = ["/cache"]
+network_mode = "gitlab-network"
+shm_size = 0
+#wait_for_services_timeout = 120
+[runners.cache]
+[runners.cache.s3]
+[runners.cache.gcs]

@@ -1,0 +1,38 @@
+verify-image:
+  stage: scan-pipeline:verify-image
+  image: quay.io/bastiaanvanderbijl/alpine:3.20
+  script:
+    # Install necessary tools
+    - apk add --no-cache curl jq unzip
+
+    # Download Vault CLI
+    - if ! curl -o vault.zip https://releases.hashicorp.com/vault/1.16.3/vault_1.16.3_linux_amd64.zip; then echo "Failed to download Vault CLI. See the job log for details." >&2; exit 1; fi
+    - if [ ! -f vault.zip ]; then echo "Vault CLI zip file not found after download." >&2; exit 1; fi
+    - if ! unzip vault.zip; then echo "Failed to unzip Vault CLI. See the job log for details." >&2; exit 1; fi
+    - mv vault /usr/local/bin/
+    - rm vault.zip
+
+    # Download Cosign CLI
+    - if ! curl -Lo cosign https://github.com/sigstore/cosign/releases/download/v2.2.4/cosign-linux-amd64; then echo "Failed to download Cosign CLI. See the job log for details." >&2; exit 1; fi
+    - if [ ! -f cosign ]; then echo "Cosign CLI file not found after download." >&2; exit 1; fi
+    - chmod +x cosign
+    - mv cosign /usr/local/bin/
+    
+    # Authenticate with Vault
+    - export VAULT_ADDR=$VAULT_ADDR
+    - export VAULT_TOKEN=$VAULT_TOKEN_PUBLIC_KEY
+
+    # Retrieve the public key from Vault
+    - if ! vault kv get -format=json public_keys/${TOKEN_PATH} | jq -r .data.key > cosign.pub; then
+        echo "Failed to retrieve or No public key found in ${TOKEN_PATH} for ${IMAGE_NAME}:${IMAGE_TAG}. Check if public key is present." >&2;
+        exit 1;
+      fi
+
+    # Verify the container image with Cosign
+    - if ! cosign verify --key cosign.pub $IMAGE_NAME:$IMAGE_TAG; then
+        echo "Container image has been tampered with or wrong public key used." >&2;
+        exit 1;
+      fi
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_TAG == "scan-pipeline"'

@@ -1,0 +1,6 @@
+.idea/
+gitlab-runners/config/.runner_system_id
+registry/*
+clair/clair-tmp
+clair/postgres-data
+vault/tokens/*

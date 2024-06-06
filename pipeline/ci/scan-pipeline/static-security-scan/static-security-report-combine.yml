@@ -1,0 +1,69 @@
+combine-static-security-reports:
+  stage: scan-pipeline:static-security-scan-report-combine
+  needs:
+    - process-trivy
+    - process-clair
+    - process-grype
+  image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
+  script:
+    - pip install pandas
+    - |
+      python - <<EOF
+      import json
+      import pandas as pd
+      from collections import defaultdict
+
+      try:
+          def load_json_report(file_path):
+              with open(file_path) as f:
+                  return json.load(f)
+
+          # Load the processed reports
+          grype_data = load_json_report('reports/processed_grype_report.json')
+          clair_data = load_json_report('reports/processed_clair_report.json')
+          trivy_data = load_json_report('reports/processed_trivy_report.json')
+
+          # Combine all data
+          all_data = grype_data + clair_data + trivy_data
+
+          # Merge data by CVE ID, ensuring no duplicates
+          merged_data = defaultdict(dict)
+          for entry in all_data:
+              cve_id = entry['CVE ID']
+              if cve_id in merged_data:
+                  for key, value in entry.items():
+                      if key == 'Found by Scanner':
+                          merged_data[cve_id][key] = list(set(merged_data[cve_id][key] + value))
+                      elif not merged_data[cve_id].get(key) or merged_data[cve_id][key] in ['', 'unknown', 'Unknown']:
+                          merged_data[cve_id][key] = value
+              else:
+                  merged_data[cve_id] = entry
+
+          # Convert to list for DataFrame
+          merged_data_list = list(merged_data.values())
+
+          # Create dataframe
+          df_combined = pd.DataFrame(merged_data_list)
+
+          # Convert combined dataframe to JSON
+          combined_json = df_combined.to_json(orient='records', indent=4)
+
+          # Save to a file
+          output_path = 'reports/combined_cve_report.json'
+          with open(output_path, 'w') as f:
+              f.write(combined_json)
+
+      except Exception as e:
+          print(f"An error occurred while combining the static security reports: {e}")
+          exit(1)
+      EOF
+  artifacts:
+    paths:
+      - reports/combined_cve_report.json
+  dependencies:
+    - process-grype
+    - process-clair
+    - process-trivy
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_TAG == "scan-pipeline"'

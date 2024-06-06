@@ -1,0 +1,64 @@
+variables:
+  IMAGE_NAME: $IMAGE_NAME
+  IMAGE_TAG: "latest"
+
+update-report:
+  stage: sign-pipeline:update-report
+  needs:
+    - sign-and-push-image
+  image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
+  script:
+    - pip install pymongo
+    - export IMAGE_ONLY_NAME=$(echo $IMAGE_NAME | awk -F/ '{print $NF}')
+    - |
+      python - <<EOF
+      from pymongo import MongoClient
+      import os
+      from datetime import datetime, timezone
+
+      # Get environment variables
+      image_name = os.getenv('IMAGE_NAME')
+      image_tag = os.getenv('IMAGE_TAG')
+      internal_image = os.getenv('IMAGE_ONLY_NAME')
+
+      # Connect to MongoDB
+      mongo_uri = os.environ.get("MONGO_URI")
+      client = MongoClient(mongo_uri)
+      db = client["image_wasstraat"]
+      collection = db["scanning_reports"]
+
+      # Define the filter to find the document using IMAGE_NAME and IMAGE_TAG
+      filter = {"image": image_name, "tag": image_tag}
+
+      # Find the existing document
+      existing_document = collection.find_one(filter)
+
+      # If an existing document is found, retain old data and add new items
+      if existing_document:
+          update = {
+              "image": image_name,
+              "tag": image_tag,
+              "static scan vulnerabilities": existing_document.get('static scan vulnerabilities'),
+              "dynamic scan vulnerabilities": existing_document.get('dynamic scan vulnerabilities'),
+              "sbom": existing_document.get('sbom'),
+              "container_image_linter": existing_document.get('container_image_linter'),
+              "internal_image": internal_image,
+              "internal_tag": image_tag,
+              "status": "approved",
+              "finished_at": datetime.now(timezone.utc)
+          }
+
+          # Replace the existing document with the updated data
+          result = collection.replace_one(filter, update)
+
+          if result.matched_count > 0:
+              print("Final combined report updated in MongoDB")
+          else:
+              print("No matching document found to update")
+      else:
+          print("No existing document found with the specified image and tag")
+
+      EOF
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_TAG == "sign-pipeline"'

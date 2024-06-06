@@ -1,0 +1,184 @@
+process-grype-reports:
+  stage: rescan-pipeline:static-security-scan-process
+  needs: [grype-scans]
+  image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
+  script:
+    - pip install pandas
+    - |
+      python - <<EOF
+      import json
+      import os
+      import pandas as pd
+
+      try:
+          def load_json_report(file_path):
+              with open(file_path) as f:
+                  return json.load(f)
+
+          # Load the Grype scan results
+          scan_results_file = 'reports/grype-scan-results.json'
+          scan_results = load_json_report(scan_results_file)['results']
+
+          # Initialize a dictionary to hold the standardized results
+          standardized_results = {}
+
+          # Process each image:tag scan result
+          for image_tag, report in scan_results.items():
+              if 'matches' in report:
+                  grype_vulns = report['matches']
+                  processed_results = []
+                  for match in grype_vulns:
+                      vuln = match['vulnerability']
+                      artifact = match['artifact']
+                      processed_results.append({
+                          'CVE ID': vuln['id'],
+                          'Package Name': artifact['name'],
+                          'Installed Version': artifact['version'],
+                          'Severity': vuln['severity'],
+                          'Description': vuln.get('description', ''),
+                          'Fixed Version': vuln.get('fix', {}).get('versions', []),
+                          'Found by Scanner': 'Grype',
+                          'Link to More Information': vuln.get('urls', [''])[0]
+                      })
+                  standardized_results[image_tag] = processed_results
+
+          # Save all standardized results to a single JSON file
+          with open('reports/processed_grype_reports.json', 'w') as f:
+              json.dump({"results": standardized_results}, f, indent=4)
+
+      except Exception as e:
+          print(f"An error occurred while processing the Grype reports: {e}")
+          exit(1)
+      EOF
+  artifacts:
+    paths:
+      - reports/processed_grype_reports.json
+  dependencies:
+    - grype-scans
+  allow_failure: false
+  only:
+    - schedules
+
+
+process-clair-reports:
+  stage: rescan-pipeline:static-security-scan-process
+  needs: [clair-scans]
+  image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
+  script:
+    - pip install pandas
+    - |
+      python - <<EOF
+      import json
+      import pandas as pd
+
+      try:
+          def load_json_report(file_path):
+              with open(file_path) as f:
+                  return json.load(f)
+
+          # Load the Clair scan results
+          scan_results_file = 'reports/clair-scan-results.json'
+          scan_results = load_json_report(scan_results_file)['results']
+
+          # Initialize a dictionary to hold the standardized results
+          standardized_results = {}
+
+          # Process each image:tag scan result
+          for image_tag, report in scan_results.items():
+              if 'vulnerabilities' in report:
+                  clair_vulns = report['vulnerabilities']
+                  processed_results = []
+                  for vuln_id, vuln_details in clair_vulns.items():
+                      package_id = vuln_details['package']['id']
+                      package_name = report['packages'][package_id]['name'] if package_id in report['packages'] else vuln_details['package']['name']
+                      package_version = report['packages'][package_id]['version'] if package_id in report['packages'] else vuln_details['package']['version']
+
+                      processed_results.append({
+                          'CVE ID': vuln_details['name'],
+                          'Package Name': package_name,
+                          'Installed Version': package_version,
+                          'Severity': vuln_details['normalized_severity'],
+                          'Description': vuln_details.get('description', ''),
+                          'Fixed Version': vuln_details.get('fixed_in_version', ''),
+                          'Found by Scanner': 'Clair',
+                          'Link to More Information': vuln_details.get('links', [''])[0]
+                      })
+                  standardized_results[image_tag] = processed_results
+
+          # Save all standardized results to a single JSON file
+          with open('reports/processed_clair_reports.json', 'w') as f:
+              json.dump({"results": standardized_results}, f, indent=4)
+
+      except Exception as e:
+          print(f"An error occurred while processing the Clair reports: {e}")
+          exit(1)
+      EOF
+  artifacts:
+    paths:
+      - reports/processed_clair_reports.json
+  dependencies:
+    - clair-scans
+  allow_failure: false
+  only:
+    - schedules
+
+process-trivy-reports:
+  stage: rescan-pipeline:static-security-scan-process
+  needs: [trivy-scans]
+  image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
+  script:
+    - pip install pandas
+    - |
+      python - <<EOF
+      import json
+      import os
+      import pandas as pd
+
+      try:
+          def load_json_report(file_path):
+              with open(file_path) as f:
+                  return json.load(f)
+
+          # Load the Trivy scan results
+          scan_results_file = 'reports/trivy-scan-results.json'
+          scan_results = load_json_report(scan_results_file)['results']
+
+          # Initialize a dictionary to hold the standardized results
+          standardized_results = {}
+
+          # Process each image:tag scan result
+          for image_tag, report in scan_results.items():
+              if 'Results' in report:
+                  trivy_vulns = report['Results']
+                  processed_results = []
+                  for result in trivy_vulns:
+                      if 'Vulnerabilities' in result:
+                          for vuln in result['Vulnerabilities']:
+                              processed_results.append({
+                                  'CVE ID': vuln['VulnerabilityID'],
+                                  'Package Name': vuln['PkgName'],
+                                  'Installed Version': vuln['InstalledVersion'],
+                                  'Severity': vuln['Severity'],
+                                  'Description': vuln.get('Description', ''),
+                                  'Fixed Version': vuln.get('FixedVersion', ''),
+                                  'Found by Scanner': 'Trivy',
+                                  'Link to More Information': vuln.get('PrimaryURL', '')
+                              })
+                  standardized_results[image_tag] = processed_results
+
+          # Save all standardized results to a single JSON file
+          with open('reports/processed_trivy_reports.json', 'w') as f:
+              json.dump({"results": standardized_results}, f, indent=4)
+
+      except Exception as e:
+          print(f"An error occurred while processing the Trivy reports: {e}")
+          exit(1)
+      EOF
+  artifacts:
+    paths:
+      - reports/processed_trivy_reports.json
+  dependencies:
+    - trivy-scans
+  allow_failure: false
+  only:
+    - schedules

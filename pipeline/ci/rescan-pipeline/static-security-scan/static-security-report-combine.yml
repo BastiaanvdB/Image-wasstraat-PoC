@@ -1,0 +1,91 @@
+combine-static-security-rescan-reports:
+  stage: rescan-pipeline:static-security-scan-process
+  needs:
+    - process-trivy-reports
+    - process-clair-reports
+    - process-grype-reports
+  image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
+  script:
+    - pip install pandas
+    - |
+      python - <<EOF
+      import json
+      from collections import defaultdict
+
+      try:
+          def load_json_report(file_path):
+              with open(file_path) as f:
+                  return json.load(f)
+
+          def combine_reports(grype_data, clair_data, trivy_data):
+              combined_results = defaultdict(lambda: defaultdict(dict))
+
+              # Helper function to add entries to the combined results
+              def add_to_combined(image_tag, source, data):
+                  for item in data:
+                      cve_id = item['CVE ID']
+                      if cve_id in combined_results[image_tag]:
+                          for key, value in item.items():
+                              if key == 'Found by Scanner':
+                                  combined_results[image_tag][cve_id][key] = list(set(combined_results[image_tag][cve_id][key] + [source]))
+                              elif key == 'Fixed Version' and combined_results[image_tag][cve_id][key]:
+                                  combined_results[image_tag][cve_id][key] = list(set(combined_results[image_tag][cve_id][key] + value))
+                              else:
+                                  combined_results[image_tag][cve_id][key] = value
+                      else:
+                          combined_results[image_tag][cve_id] = {
+                              'CVE ID': item['CVE ID'],
+                              'Package Name': item['Package Name'],
+                              'Installed Version': item['Installed Version'],
+                              'Severity': item['Severity'],
+                              'Description': item['Description'],
+                              'Fixed Version': item['Fixed Version'],
+                              'Found by Scanner': [source],
+                              'Link to More Information': item['Link to More Information']
+                          }
+
+              # Process Grype data
+              for image_tag, data in grype_data['results'].items():
+                  add_to_combined(image_tag, 'Grype', data)
+
+              # Process Clair data
+              for image_tag, data in clair_data['results'].items():
+                  add_to_combined(image_tag, 'Clair', data)
+
+              # Process Trivy data
+              for image_tag, data in trivy_data['results'].items():
+                  add_to_combined(image_tag, 'Trivy', data)
+
+              # Standardize the results
+              standardized_results = defaultdict(list)
+              for image_tag, vulns in combined_results.items():
+                  standardized_results[image_tag] = list(vulns.values())
+
+              return {"results": standardized_results}
+
+          # Load the processed reports
+          grype_data = load_json_report('reports/processed_grype_reports.json')
+          clair_data = load_json_report('reports/processed_clair_reports.json')
+          trivy_data = load_json_report('reports/processed_trivy_reports.json')
+
+          # Combine all reports
+          combined_data = combine_reports(grype_data, clair_data, trivy_data)
+
+          # Save combined data to a JSON file
+          with open('reports/combined_static_security_reports.json', 'w') as f:
+              json.dump(combined_data, f, indent=4)
+
+      except Exception as e:
+          print(f"An error occurred while combining the static security reports: {e}")
+          exit(1)
+      EOF
+  artifacts:
+    paths:
+      - reports/combined_static_security_reports.json
+  dependencies:
+    - process-grype-reports
+    - process-clair-reports
+    - process-trivy-reports
+  allow_failure: false
+  only:
+    - schedules

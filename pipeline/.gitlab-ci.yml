@@ -1,0 +1,51 @@
+
+variables:
+  IMAGE_NAME: $IMAGE_NAME
+  IMAGE_TAG: "latest"
+  TOKEN_PATH: $TOKEN_PATH
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: tcp://docker-dind:2375/
+  DOCKER_DRIVER: overlay2
+
+stages:
+  - scan-pipeline:verify-image
+  - scan-pipeline:static-security-scan
+  - scan-pipeline:dynamic-security-scan
+  - scan-pipeline:dynamic-security-scan-report-process
+  - scan-pipeline:static-security-scan-report-process
+  - scan-pipeline:static-security-scan-report-combine
+  - scan-pipeline:sbom-scan
+  - scan-pipeline:sbom-report-process
+  - scan-pipeline:sbom-report-combine
+  - scan-pipeline:dockle-scan
+  - scan-pipeline:dockle-report-process
+  - scan-pipeline:dockle-report-combine
+  - scan-pipeline:final-combine
+  - scan-pipeline:upload-final-combine
+  - sign-pipeline:sign-and-push-image
+  - sign-pipeline:update-report
+  - rescan-pipeline:retrieve-catalog
+  - rescan-pipeline:static-security-scan
+  - rescan-pipeline:static-security-scan-process
+  - rescan-pipeline:static-security-scan-combine
+  - rescan-pipeline:upload-new-found-CVEs
+
+include:
+  - local: 'ci/scan-pipeline/cosign/cosign-verify.yml'
+  - local: 'ci/scan-pipeline/static-security-scan/static-security-scan.yml'
+  - local: 'ci/scan-pipeline/static-security-scan/static-security-report-process.yml'
+  - local: 'ci/scan-pipeline/static-security-scan/static-security-report-combine.yml'
+  - local: 'ci/scan-pipeline/dynamic-security-scan/dynamic-security-scan.yml'
+  - local: 'ci/scan-pipeline/dynamic-security-scan/dynamic-security-report-process.yml'
+  - local: 'ci/scan-pipeline/sbom-scan/sbom-scan.yml'
+  - local: 'ci/scan-pipeline/sbom-scan/sbom-report-process.yml'
+  - local: 'ci/scan-pipeline/image-linter/dockle-scan.yml'
+  - local: 'ci/scan-pipeline/final-combine.yml'
+  - local: 'ci/scan-pipeline/mongodb/upload-final-combine/upload-final-combine.yml'
+  - local: 'ci/sign-pipeline/cosign/cosign-verify.yml'
+  - local: 'ci/sign-pipeline/update-report.yml'
+  - local: 'ci/rescan-pipeline/catalog/retrieve-registry-catalog.yml'
+  - local: 'ci/rescan-pipeline/static-security-scan/static-security-scan.yml'
+  - local: 'ci/rescan-pipeline/static-security-scan/static-security-report-process.yml'
+  - local: 'ci/rescan-pipeline/static-security-scan/static-security-report-combine.yml'
+  - local: 'ci/rescan-pipeline/mongodb/update-cve.yml'

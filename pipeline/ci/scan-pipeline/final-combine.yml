@@ -1,0 +1,52 @@
+final-combine:
+  stage: scan-pipeline:final-combine
+  needs:
+    - combine-static-security-reports
+    - dockle-scan
+    - process-syft
+    - process-falco
+  image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
+  script:
+    - pip install pandas
+    - |
+      python - <<EOF
+      import json
+      import pandas as pd
+
+      def load_json_report(file_path):
+          with open(file_path) as f:
+              return json.load(f)
+
+      # Load the combined reports
+      static_security_data = load_json_report('reports/combined_cve_report.json')
+      dynamic_security_data = load_json_report('reports/filtered_falcon_events.json')
+      sbom_data = load_json_report('reports/processed_syft_report.json')
+      dockle_data = load_json_report('reports/dockle-report.json')
+
+      # Combine all data into one final report
+      final_combined_data = {
+          'image': "$IMAGE_NAME",
+          'tag': "$IMAGE_TAG",
+          'static scan vulnerabilities': static_security_data,
+          'dynamic scan vulnerabilities': dynamic_security_data,
+          'sbom': sbom_data,
+          'container_image_linter': dockle_data
+      }
+
+      # Save the final combined report
+      output_path = 'reports/final_combined_report.json'
+      with open(output_path, 'w') as f:
+          json.dump(final_combined_data, f, indent=4)
+
+      EOF
+  artifacts:
+    paths:
+      - reports/final_combined_report.json
+  dependencies:
+    - combine-static-security-reports
+    - process-syft
+    - dockle-scan
+    - process-falco
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_TAG == "scan-pipeline"'

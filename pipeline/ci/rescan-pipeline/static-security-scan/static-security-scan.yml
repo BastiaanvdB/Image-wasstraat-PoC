@@ -1,0 +1,179 @@
+default:
+  image: quay.io/bastiaanvanderbijl/docker:26.1.3
+ 
+grype-scans:
+  stage: rescan-pipeline:static-security-scan
+  needs: [retrieve-catalog]
+  services:
+    - name: quay.io/bastiaanvanderbijl/docker:26.1.3-dind
+      alias: docker-dind-grype
+  variables:
+    DOCKER_HOST: tcp://docker-dind-grype:2375/
+  before_script:
+    - while ! docker info; do sleep 1; done
+    - apk update
+    - apk add python3 py3-pip
+    - python3 -m venv venv
+    - source venv/bin/activate
+    - pip install requests
+  script:
+    - mkdir -p reports
+    - |
+      python - <<EOF
+      import os
+      import json
+
+      with open("reports/catalog-overview.json") as f:
+          catalog = json.load(f)
+
+      scan_results = {}
+
+      for item in catalog:
+          image = item['image']
+          tags = item['tags']
+          for tag in tags:
+              image_tag = f"{image}:{tag}"
+              scan_output_file = f"reports/grype-temp-{image.replace('/', '_')}-{tag}.json"
+              result = os.system(f"docker run --rm quay.io/bastiaanvanderbijl/grype 172.20.0.2:5000/{image_tag} -o json > {scan_output_file}")
+              if result != 0:
+                  print(f"Grype scan failed for {image_tag}")
+                  continue
+
+              with open(scan_output_file, "r") as output_file:
+                  scan_data = json.load(output_file)
+                  scan_results[image_tag] = scan_data
+
+      # Save all scan results to a single JSON file
+      with open("reports/grype-scan-results.json", "w") as f:
+          json.dump({"results": scan_results}, f, indent=2)
+
+      EOF
+  artifacts:
+    paths:
+      - reports/
+  allow_failure: false
+  dependencies:
+    - retrieve-catalog
+  after_script:
+    - docker container prune -f
+    - docker image prune -f
+  only:
+    - schedules
+
+clair-scans:
+  stage: rescan-pipeline:static-security-scan
+  needs: [retrieve-catalog]
+  services:
+    - name: quay.io/bastiaanvanderbijl/docker:26.1.3-dind
+      alias: docker-dind-clair
+  variables:
+    DOCKER_HOST: tcp://docker-dind-clair:2375/
+  before_script:
+    - while ! docker info; do sleep 1; done
+    - apk update
+    - apk add python3 py3-pip
+    - python3 -m venv venv
+    - source venv/bin/activate
+    - pip install requests
+  script:
+    - mkdir -p reports
+    - |
+      python - <<EOF
+      import os
+      import json
+
+      with open("reports/catalog-overview.json") as f:
+          catalog = json.load(f)
+
+      scan_results = {}
+
+      for item in catalog:
+          image = item['image']
+          tags = item['tags']
+          for tag in tags:
+              image_tag = f"{image}:{tag}"
+              scan_output_file = f"reports/clair-temp-{image.replace('/', '_')}-{tag}.json"
+              result = os.system(f"docker run --rm quay.io/bastiaanvanderbijl/clairctl-debian report --out json --host http://172.20.0.5:6060 172.20.0.2:5000/{image_tag} > {scan_output_file}")
+              if result != 0:
+                  print(f"Clair scan failed for {image_tag}")
+                  continue
+
+              with open(scan_output_file, "r") as output_file:
+                  scan_data = json.load(output_file)
+                  scan_results[image_tag] = scan_data
+
+      # Save all scan results to a single JSON file
+      with open("reports/clair-scan-results.json", "w") as f:
+          json.dump({"results": scan_results}, f, indent=2)
+
+      EOF
+  artifacts:
+    paths:
+      - reports/
+  allow_failure: false
+  dependencies:
+    - retrieve-catalog
+  after_script:
+    - docker container prune -f
+    - docker image prune -f
+  only:
+    - schedules
+    
+trivy-scans:
+  stage: rescan-pipeline:static-security-scan
+  needs: [retrieve-catalog]
+  services:
+    - name: quay.io/bastiaanvanderbijl/docker:26.1.3-dind
+      alias: docker-dind-trivy
+  variables:
+    DOCKER_HOST: tcp://docker-dind-trivy:2375/
+  before_script:
+    - while ! docker info; do sleep 1; done
+    - apk update
+    - apk add python3 py3-pip
+    - python3 -m venv venv
+    - source venv/bin/activate
+    - pip install requests
+  script:
+    - mkdir -p reports
+    - |
+      python - <<EOF
+      import os
+      import json
+
+      with open("reports/catalog-overview.json") as f:
+          catalog = json.load(f)
+
+      scan_results = {}
+
+      for item in catalog:
+          image = item['image']
+          tags = item['tags']
+          for tag in tags:
+              image_tag = f"{image}:{tag}"
+              scan_output_file = f"reports/trivy-temp-{image.replace('/', '_')}-{tag}.json"
+              result = os.system(f"docker run --rm quay.io/bastiaanvanderbijl/trivy image 172.20.0.2:5000/{image_tag} -f json > {scan_output_file}")
+              if result != 0:
+                  print(f"Trivy scan failed for {image_tag}")
+                  continue
+
+              with open(scan_output_file, "r") as output_file:
+                  scan_data = json.load(output_file)
+                  scan_results[image_tag] = scan_data
+
+      # Save all scan results to a single JSON file
+      with open("reports/trivy-scan-results.json", "w") as f:
+          json.dump({"results": scan_results}, f, indent=2)
+
+      EOF
+  artifacts:
+    paths:
+      - reports/
+  allow_failure: false
+  dependencies:
+    - retrieve-catalog
+  after_script:
+    - docker container prune -f
+    - docker image prune -f
+  only:
+    - schedules
