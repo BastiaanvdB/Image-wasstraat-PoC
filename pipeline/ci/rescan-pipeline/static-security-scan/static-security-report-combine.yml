@@ -28,8 +28,9 @@ combine-static-security-rescan-reports:
                           for key, value in item.items():
                               if key == 'Found by Scanner':
                                   combined_results[image_tag][cve_id][key] = list(set(combined_results[image_tag][cve_id][key] + [source]))
-                              elif key == 'Fixed Version' and combined_results[image_tag][cve_id][key]:
-                                  combined_results[image_tag][cve_id][key] = list(set(combined_results[image_tag][cve_id][key] + value))
+                              elif key == 'Fixed Version':
+                                  # Use a set to avoid duplicates
+                                  combined_results[image_tag][cve_id][key] = list(set(combined_results[image_tag][cve_id][key] + ([value] if isinstance(value, str) else value)))
                               else:
                                   combined_results[image_tag][cve_id][key] = value
                       else:
@@ -39,7 +40,7 @@ combine-static-security-rescan-reports:
                               'Installed Version': item['Installed Version'],
                               'Severity': item['Severity'],
                               'Description': item['Description'],
-                              'Fixed Version': item['Fixed Version'],
+                              'Fixed Version': list(set([item['Fixed Version']])) if isinstance(item['Fixed Version'], str) else list(set(item['Fixed Version'])),
                               'Found by Scanner': [source],
                               'Link to More Information': item['Link to More Information']
                           }

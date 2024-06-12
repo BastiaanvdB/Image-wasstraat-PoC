@@ -22,7 +22,9 @@ stages:
   - scan-pipeline:dockle-report-combine
   - scan-pipeline:final-combine
   - scan-pipeline:upload-final-combine
-  - sign-pipeline:sign-and-push-image
+  - sign-pipeline:verify-image
+  - sign-pipeline:push-image
+  - sign-pipeline:sign-image
   - sign-pipeline:update-report
   - rescan-pipeline:retrieve-catalog
   - rescan-pipeline:static-security-scan
@@ -43,6 +45,8 @@ include:
   - local: 'ci/scan-pipeline/final-combine.yml'
   - local: 'ci/scan-pipeline/mongodb/upload-final-combine/upload-final-combine.yml'
   - local: 'ci/sign-pipeline/cosign/cosign-verify.yml'
+  - local: 'ci/sign-pipeline/push-image.yml'
+  - local: 'ci/sign-pipeline/cosign/cosign-sign.yml'
   - local: 'ci/sign-pipeline/update-report.yml'
   - local: 'ci/rescan-pipeline/catalog/retrieve-registry-catalog.yml'
   - local: 'ci/rescan-pipeline/static-security-scan/static-security-scan.yml'

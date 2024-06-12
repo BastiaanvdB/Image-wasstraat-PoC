@@ -26,7 +26,7 @@ services:
     environment:
       GITLAB_OMNIBUS_CONFIG: |
         gitlab_rails['initial_root_password'] = '2024Vz2404Vz@@'
-        external_url 'http://localhost'
+        external_url 'http://gitlab-web'
         gitlab_rails['gitlab_shell_ssh_port'] = 2222
     ports:
       - "80:80"

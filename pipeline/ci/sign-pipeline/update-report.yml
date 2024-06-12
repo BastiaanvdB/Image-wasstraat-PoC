@@ -5,7 +5,7 @@ variables:
 update-report:
   stage: sign-pipeline:update-report
   needs:
-    - sign-and-push-image
+    - sign-image
   image: quay.io/bastiaanvanderbijl/python:3.12.3-slim
   script:
     - pip install pymongo
@@ -45,7 +45,7 @@ update-report:
               "internal_image": internal_image,
               "internal_tag": image_tag,
               "status": "approved",
-              "finished_at": datetime.now(timezone.utc)
+              "approved_on": datetime.now(timezone.utc)
           }
 
           # Replace the existing document with the updated data

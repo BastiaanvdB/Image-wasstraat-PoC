@@ -1,0 +1,30 @@
+default:
+  image: quay.io/bastiaanvanderbijl/docker:26.1.3
+
+push-image:
+  stage: sign-pipeline:push-image
+  needs:
+    - verify-image-before-push
+  services:
+    - name: quay.io/bastiaanvanderbijl/docker:26.1.3-dind
+      command: ["--insecure-registry=172.20.0.2:5000"]
+      alias: docker-dind-push-image
+  variables:
+    DOCKER_HOST: tcp://docker-dind-push-image:2375/
+  script:
+
+     # Pull the image
+    - docker pull $IMAGE_NAME:$IMAGE_TAG
+
+    # Extract image name from the full path
+    - export IMAGE_ONLY_NAME=$(echo $IMAGE_NAME | awk -F/ '{print $NF}')
+    - echo $IMAGE_ONLY_NAME
+
+    - export FINAL_IMAGE=172.20.0.2:5000/${IMAGE_ONLY_NAME}:${IMAGE_TAG}
+
+    # Tag and push the image with a tag
+    - docker tag $IMAGE_NAME:$IMAGE_TAG 172.20.0.2:5000/$IMAGE_ONLY_NAME:$IMAGE_TAG
+    - docker push ${FINAL_IMAGE}
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_TAG == "sign-pipeline"'

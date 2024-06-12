@@ -31,20 +31,19 @@ upload-new-found-CVEs-mongo:
           # Find the existing document
           existing_document = collection.find_one(filter)
 
-          # Initialize new vulnerabilities list
-          new_vulnerabilities = []
-
           if existing_document:
               image_name = existing_document['image']
               image_tag = existing_document['tag']
               existing_vulnerabilities = existing_document.get('static scan vulnerabilities', [])
+              existing_new_vulnerabilities = existing_document.get('new_vulnerabilities', [])
 
               # Add new vulnerabilities if they are not already in the existing document
               for new_vuln in vulnerabilities:
                   # Ensure the 'CVE ID' key exists in the new vulnerability
                   if 'CVE ID' in new_vuln:
-                      if not any(existing_vuln.get('CVE ID') == new_vuln['CVE ID'] for existing_vuln in existing_vulnerabilities):
-                          new_vulnerabilities.append(new_vuln)
+                      if not any(existing_vuln.get('CVE ID') == new_vuln['CVE ID'] for existing_vuln in existing_vulnerabilities) and not any(new_vuln['CVE ID'] == new_vuln2['CVE ID'] for new_vuln2 in existing_new_vulnerabilities):
+                          new_vuln['Found Datetime'] = datetime.now().isoformat()
+                          existing_new_vulnerabilities.append(new_vuln)
                   else:
                       print(f"Warning: 'CVE ID' key missing in new vulnerability: {new_vuln}")
 
@@ -57,9 +56,10 @@ upload-new-found-CVEs-mongo:
                   "container_image_linter": existing_document.get('container_image_linter'),
                   "internal_image": internal_image,
                   "internal_tag": internal_tag,
-                  "new_vulnerabilities": new_vulnerabilities,
-                  "status": "approved",
-                  "finished_at": datetime.now(timezone.utc)
+                  "new_vulnerabilities": existing_new_vulnerabilities,
+                  "status": existing_document.get('status'),
+                  "approved_on": existing_document.get('approved_on'),
+                  "rescanned_at": datetime.now(timezone.utc)
               }
 
               # Replace the existing document with the updated data
