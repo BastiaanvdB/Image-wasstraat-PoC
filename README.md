@@ -53,11 +53,11 @@ Import the pipelines into your GitLab project.
 
 #### 3. Setup the Pipeline Tags
 
-Configure the necessary tags for your pipelines.
+Configure the necessary tags for the scan and sign pipeline.
 
 #### 4. Setup the Schedule Pipeline
 
-Configure the schedule for running your pipelines.
+Configure the schedule for the rescan pipeline.
 
 ### Setup Variables
 
