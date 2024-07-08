@@ -24,7 +24,7 @@ Ensure Vault is properly configured.
 
 #### 3. Generate Public and Private Key with Cosign
 
-Generate the public and private keys if you intend to sign your own images:
+Generate the public and private keys:
 ```bash
 cosign generate-key-pair
 ```
@@ -39,17 +39,17 @@ Execute the initialization script to set up Vault.
 
 #### 6. Let Clair Finish Loading Database
 
-Clair may take some time to load its database. Please be patient during this process.
+Clair may take some time to load its database. Please be patient during this process(Get some coffee).
 
 ### GitLab Setup
 
 #### 1. Connect the Runner
 
-Ensure your GitLab Runner is properly connected to your GitLab instance.
+Ensure your GitLab Runner is properly connected to the GitLab instance.
 
 #### 2. Load in the Pipelines
 
-Import the pipelines into your GitLab project.
+Import the pipelines into the GitLab project.
 
 #### 3. Setup the Pipeline Tags
 
@@ -61,7 +61,7 @@ Configure the schedule for the rescan pipeline.
 
 ### Setup Variables
 
-Configure the following variables in your GitLab CI/CD settings:
+Configure the following variables in the GitLab CI/CD settings:
 
 - `mongo_uri`
 - `COSIGN_PASSWORD`
@@ -71,7 +71,7 @@ Configure the following variables in your GitLab CI/CD settings:
 
 ### Running Pipelines
 
-When running pipelines, use the following variables:
+When running scan and sign pipelines, use the following variables:
 
 - `IMAGE_NAME`: `<YOUR IMAGE NAME>`
 - `IMAGE_TAG`: `<YOUR IMAGE TAG>`
@@ -80,5 +80,3 @@ When running pipelines, use the following variables:
 Make sure to replace placeholders with your actual values.
 
 ---
-
-This setup ensures a smooth configuration and deployment of your project using Docker Compose, Vault, and GitLab pipelines. If you encounter any issues, please refer to the official documentation of the respective tools for further assistance.
