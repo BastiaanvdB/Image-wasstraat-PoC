@@ -19,7 +19,7 @@ services:
 
   # GITLAB
   gitlab-web:
-    image: 'gitlab/gitlab-ce:17.0.1-ce.0'
+    image: 'gitlab/gitlab-ce:17.1.1-ce.0'
     restart: always
     container_name: gitlab-web
     hostname: 'gitlab-web'
@@ -44,7 +44,7 @@ services:
 
   # RUNNER 1
   gitlab-runner-1:
-    image: gitlab/gitlab-runner:alpine3.19-v17.0.0
+    image: gitlab/gitlab-runner:alpine3.19-v17.1.0
     restart: always
     container_name: gitlab-runner-1
     hostname: gitlab-runner-1
